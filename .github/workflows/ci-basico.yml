@@ -50,7 +50,7 @@ jobs:
       # do repositorio e branch/commit corretos dentro do runner.
       # -----------------------------------------------------------------
       - name: Checkout do codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # -----------------------------------------------------------------
       # Passo 2: configurar a versao do Python que sera usada no runner.
