@@ -14,7 +14,7 @@
 #   em 2026", nao como verdade permanente.
 
 Flask==3.0.3
-Jinja2==3.1.4
+Jinja2==3.1.6
 Werkzeug==3.0.6
 PyYAML==6.0.2
 requests==2.32.3
