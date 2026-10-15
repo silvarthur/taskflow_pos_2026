@@ -62,7 +62,7 @@ jobs:
           fetch-depth: 0
 
       - name: Rodar Gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           # Em repositórios públicos gratuitos a action funciona sem
           # necessidade de licença. GITHUB_TOKEN já é fornecido
