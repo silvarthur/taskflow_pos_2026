@@ -104,8 +104,9 @@ def login():
         password = request.form["password"]
 
         db = get_db()
+        # vulnerável a SQL Injection
         cur = db.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
+            f"SELECT * FROM users WHERE username = '{username}'"
         )
         user = cur.fetchone()
 
