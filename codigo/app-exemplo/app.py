@@ -185,4 +185,4 @@ if __name__ == "__main__":
     # 5000 para 5001 para evitar conflitos com outras aplicacoes locais (Airtop no MacOS).
     # Talvez seja preciso revisa esse ponto no futuro se precisarmos de um host que expõe
     # o app a toda a rede.
-    app.run(host="127.0.0.1", port=5001)
+    app.run(host="127.0.0.1", port=5000)
