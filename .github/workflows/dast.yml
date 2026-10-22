@@ -34,10 +34,8 @@ jobs:
         # Ajuste o "context"/"file" conforme a localizacao real do
         # Dockerfile e do codigo no seu repositorio.
         run: |
-          docker build \
-            -t taskflow:dast \
-            -f codigo/app-exemplo/Dockerfile \
-            codigo/app-exemplo/
+          docker build -t taskflow:dast .
+            
 
       - name: Subir o TaskFlow em background
         run: |
