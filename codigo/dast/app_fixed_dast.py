@@ -227,26 +227,6 @@ def new_task():
 #     # Sem informacoes sensiveis - apenas confirma que o processo esta de pe.
 #     return {"status": "ok"}
 
-# -----------------------------------------------------------------------
-# Vulnerabilidade #5 (endpoint de debug exposto): MANTIDA DE PROPOSITO.
-#
-# Este endpoint continua publico e sem autenticacao. SAST estatico as
-# vezes acerta esse tipo de problema (ex: regra "debug endpoint exposed"),
-# mas o jeito mais didatico de descobrir e explorar isso e testando a
-# aplicacao rodando de fato - por isso a correcao definitiva fica para o
-# Modulo 4 (DAST), junto com a correcao do XSS acima.
-# -----------------------------------------------------------------------
-@app.route("/debug/info")
-def debug_info():
-    import platform
-    import sys
-
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-        "secret_key": app.config["SECRET_KEY"],
-    }
-
 
 if __name__ == "__main__":
     with app.app_context():
@@ -262,4 +242,4 @@ if __name__ == "__main__":
         "true",
         "yes",
     )
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)
