@@ -36,9 +36,8 @@ jobs:
         run: |
           docker build \
             -t taskflow:dast \
-            -f codigo/app-exemplo/Dockerfile \
-            codigo/app-exemplo/
-            
+            -f codigo/dast/Dockerfile.taskflow \
+            codigo/dast/
 
       - name: Subir o TaskFlow em background
         run: |
