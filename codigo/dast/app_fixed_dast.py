@@ -164,9 +164,6 @@ def tasks():
     db = get_db()
 
     if search:
-        # Correcao (Modulo 3): busca tambem parametrizada. O padrao LIKE
-        # e montado concatenando o "%" ao valor JA PASSADO COMO PARAMETRO,
-        # nunca concatenando o valor do usuario direto na string SQL.
         like_pattern = f"%{search}%"
         rows = db.execute(
             "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
@@ -177,16 +174,11 @@ def tasks():
             "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
         ).fetchall()
 
-    # Correcao (Modulo 4): a lista de tarefas e passada como dado estruturado
-    # (lista de linhas do banco) para o template "tasks.html", que usa
-    # "{{ task['title'] }}" / "{{ task['description'] }}" com autoescape.
-    # Isso elimina a XSS armazenada: se a descricao contiver
-    # "<script>...</script>" ou "<img onerror=...>", o Jinja2 converte os
-    # caracteres especiais em entidades HTML (&lt;, &gt; etc.) antes de
-    # enviar a resposta, entao o navegador exibe o texto literal em vez de
-    # executar o conteudo.
     return render_template(
-        "tasks.html", tasks=rows, username=session["username"], search=search
+        "tasks.html",
+        rows=rows,
+        search=search,
+        username=session["username"],
     )
 
 
