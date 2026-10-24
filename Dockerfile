@@ -34,10 +34,10 @@ COPY --chown=taskflow:taskflow . .
 
 # CORRIGIDO (FALHA 5): EXPOSE apenas documenta a porta; o servidor de
 # desenvolvimento do Flask nao e mais usado.
-EXPOSE 5001
+EXPOSE 500
 
 USER taskflow
 
 # CORRIGIDO (FALHA 6): gunicorn (WSGI de producao) no lugar de "python app.py".
 # Sem debug: o bloco __main__ do app.py nao e executado.
-CMD ["sh", "-c", "python -c 'from app import app, init_db; app.app_context().push(); init_db()' && exec gunicorn --bind 0.0.0.0:5001 --workers 2 app:app"]
+CMD ["sh", "-c", "python -c 'from app import app, init_db; app.app_context().push(); init_db()' && exec gunicorn --bind 0.0.0.0:5000 --workers 2 app:app"]
