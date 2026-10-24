@@ -75,6 +75,7 @@ jobs:
           # Por padrao a action ja publica um resumo no job summary.
           allow_issue_writing: false
           rules_file_name: .zap/rules.tsv
+          fail_action: true
 
       - name: Publicar relatorio do ZAP como artefato
         if: always()
