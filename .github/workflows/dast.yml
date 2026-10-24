@@ -41,8 +41,7 @@ jobs:
           docker run -d \
             --name taskflow-ci \
             -p 5001:5001 \
-            -e FLASK_SECRET_KEY=ci-apenas-para-teste \
-            -e FLASK_DEBUG=false \
+            -e TASKFLOW_SECRET_KEY=ci-apenas-para-teste \
             taskflow:dast
 
       - name: Aguardar a aplicacao ficar pronta
