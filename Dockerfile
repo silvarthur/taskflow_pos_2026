@@ -34,7 +34,7 @@ COPY --chown=taskflow:taskflow . .
 
 # CORRIGIDO (FALHA 5): EXPOSE apenas documenta a porta; o servidor de
 # desenvolvimento do Flask nao e mais usado.
-EXPOSE 500
+EXPOSE 5000
 
 USER taskflow
 
