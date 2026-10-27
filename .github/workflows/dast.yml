@@ -39,20 +39,6 @@ jobs:
         run: |
           docker compose up -d --build --wait --wait-timeout 120
 
-      # - name: Build da imagem do TaskFlow (versao corrigida)
-      #   # Ajuste o "context"/"file" conforme a localizacao real do
-      #   # Dockerfile e do codigo no seu repositorio.
-      #   run: |
-      #     docker build -t taskflow:dast .
-
-      # - name: Subir o TaskFlow em background
-      #   run: |
-      #     docker run -d \
-      #       --name taskflow-ci \
-      #       -p 5000:5000 \
-      #       -e TASKFLOW_SECRET_KEY=ci-apenas-para-teste \
-      #       taskflow:dast
-
       - name: Aguardar a aplicacao ficar pronta
         # A ZAP Baseline Scan Action falha se o alvo nao responder, entao
         # aguardamos ativamente em vez de usar um "sleep" fixo (mais
