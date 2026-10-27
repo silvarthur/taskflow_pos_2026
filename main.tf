@@ -47,6 +47,7 @@ variable "allowed_ssh_ip" {
   type        = string
   default     = "10.0.0.0/16"
 }
+data "aws_caller_identity" "current" {}
 
 # -----------------------------------------------------------------------
 # RECURSO 1: bucket de armazenamento de objetos (S3)
@@ -81,6 +82,21 @@ resource "aws_kms_key" "s3_key" {
   description             = "Chave KMS para criptografia do bucket de relatorios"
   deletion_window_in_days = 10
   enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      }
+    ]
+  })
 
   tags = {
     Projeto = "taskflow-devsecops-curso"
@@ -156,6 +172,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "relatorios_taskflow" {
     expiration {
       days = 90
     }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
   }
 }
 
@@ -164,6 +184,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "relatorios_taskflow" {
 # hipotetica que serviria a aplicacao TaskFlow
 # -----------------------------------------------------------------------
 resource "aws_security_group" "taskflow_app_sg" {
+  # checkov:skip=CKV2_AWS_5: "Security Group nao associado a ENI/EC2 por ser apenas um teste de IaC estatico"  
   name        = "taskflow-app-sg-seguro"
   description = "Security group de exemplo"
 
