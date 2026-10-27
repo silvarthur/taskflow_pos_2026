@@ -18,7 +18,10 @@ ferramenta especifica da esteira e corrigida em uma versao "fixed" do codigo.
 """
 
 import os
-import sqlite3
+import time
+
+import psycopg2
+import psycopg2.extras
 
 from flask import Flask, g, redirect, request, session, url_for, render_template
 from dotenv import load_dotenv
@@ -36,14 +39,42 @@ if not _secret_key:
     )
 app.config["SECRET_KEY"] = _secret_key
 
-DATABASE = "taskflow.db"
 
+# PostgresSQL Connecttion String
+# postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+DATABASE_URL = os.environ.get("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError(
+        "Variavel de ambiente DATABASE_URL nao foi definida. "
+        "Ex: postgresql://usuario:senha@db:5432/taskflow"
+    )
+
+DB_CONNECT_RETRIES = 10
+DB_CONNECT_DELAY_SECONDS = 2
+
+def _connect_with_retry():
+    """Abre a conexao com o Postgres, tentando de novo se o banco ainda
+    estiver iniciando (o healthcheck do compose ja ajuda, mas nao custa ser
+    resiliente fora do Compose)."""
+    last_error = None
+    for attempt in range(1, DB_CONNECT_RETRIES + 1):
+        try:
+            return psycopg2.connect(
+                DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor
+            )
+        except psycopg2.OperationalError as exc:
+            last_error = exc
+            print(
+                f"[db] tentativa {attempt}/{DB_CONNECT_RETRIES} falhou: {exc}",
+                flush=True,
+            )
+            time.sleep(DB_CONNECT_DELAY_SECONDS)
+    raise last_error
 
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-        db.row_factory = sqlite3.Row
+        db = g._database = _connect_with_retry()
     return db
 
 
@@ -56,37 +87,43 @@ def close_connection(exception):
 
 def init_db():
     db = get_db()
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        );
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            done INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        """
-    )
+            CREATE TABLE IF NOT EXISTS tasks (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT,
+                done INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (id)
+            );
+            """
+        )
     db.commit()
 
-    cur = db.execute("SELECT COUNT(*) AS total FROM users")
-    if cur.fetchone()["total"] == 0:
-        db.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            ("admin", generate_password_hash("admin123")),
-        )
-        db.execute(
-            "INSERT INTO users (username, password) VALUES (?, ?)",
-            ("aluno", generate_password_hash("senha123")),
-        )
-        db.commit()
+    with db.cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS total FROM users")
+        total = cur.fetchone()["total"]
+
+        if total == 0:
+            cur.execute(
+                "INSERT INTO users (username, password) VALUES (%s, %s) "
+                "ON CONFLICT (username) DO NOTHING",
+                ("admin", generate_password_hash("admin123")),
+            )
+            cur.execute(
+                "INSERT INTO users (username, password) VALUES (%s, %s)"
+                "ON CONFLICT (username) DO NOTHING",
+                ("aluno", generate_password_hash("senha123")),
+            )
+    db.commit()
 
 
 @app.route("/")
@@ -104,10 +141,11 @@ def login():
         password = request.form["password"]
 
         db = get_db()
-        cur = db.execute(
-            "SELECT * FROM users WHERE username = ?", (username,)
-        )
-        user = cur.fetchone()
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM users WHERE username = %s", (username,)
+            )
+            user = cur.fetchone()
 
         if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
@@ -140,17 +178,27 @@ def tasks():
     search = request.args.get("q", "")
     db = get_db()
 
-    if search:
-        like_pattern = f"%{search}%"
-        rows = db.execute(
-            "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
-            (session["user_id"], like_pattern),
-        ).fetchall()
-    else:
-        rows = db.execute(
-            "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
-        ).fetchall()
+    with db.cursor() as cur:
+        if search:
+            like_pattern = f"%{search}%"
+            cur.execute(
+                "SELECT * FROM tasks WHERE user_id = %s AND title LIKE %s",
+                (session["user_id"], like_pattern),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM tasks WHERE user_id = %s", (session["user_id"],)
+            )
+        rows = cur.fetchall()
 
+    items = ""
+    for row in rows:
+        items += f"""
+        <li>
+            <b>{row['title']}</b> - {row['description']}
+            {'(feita)' if row['done'] else ''}
+        </li>
+        """
     return render_template(
         "tasks.html",
         rows=rows,

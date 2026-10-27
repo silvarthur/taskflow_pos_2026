@@ -32,11 +32,6 @@ services:
     ports:
       - "5000:5000"
     environment:
-      # FALHA 2: credenciais do banco de dados HARDCODED direto no
-      # docker-compose.yml, em texto puro. Esse arquivo normalmente VAI
-      # para o controle de versao (Git) - ou seja, a senha do banco fica
-      # publica para qualquer pessoa com acesso ao repositorio (e no
-      # historico do Git, mesmo que a linha seja removida depois).
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       - TASKFLOW_SECRET_KEY=${SECRET_KEY}
     # FALHA 3: nenhuma definicao de "networks" - o Compose cria uma rede
@@ -56,6 +51,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /app/.gunicorn
     # FALHA 4: nenhum "healthcheck" definido - o Compose nao tem como saber
     # se a aplicacao subiu corretamente ou travou; ela e considerada "up"
     # assim que o processo do container inicia, mesmo que o Flask tenha
@@ -97,7 +93,7 @@ services:
     # FALHA 7: sem "read_only", sem "healthcheck", sem limite de recursos -
     # os mesmos problemas do servico "web" se repetem aqui.
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
