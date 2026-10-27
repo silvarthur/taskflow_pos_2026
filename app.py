@@ -155,12 +155,16 @@ def login():
             return redirect(url_for("tasks"))
         error = "Usuario ou senha invalidos."
 
+    next_url = request.args.get("next", "")
+
     return f"""
     <h1>TaskFlow - Login</h1>
+    <a href="/login?next=painel-inicial-taskflow">Ir para o painel</a>
     <form method="post">
+        <input type="hidden" name="next" value="{next_url}">
         Usuario: <input type="text" name="username"><br>
         Senha: <input type="password" name="password"><br>
-        <input type="submit" value="Entrar">
+        <input type="submit" value="Entrar" onclick="console.log('{next_url}')">
     </form>
     <p style="color:red">{error or ""}</p>
     """

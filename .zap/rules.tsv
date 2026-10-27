@@ -1,1 +1,3 @@
-10020   FAIL    Missing Anti-clickjacking Header
+10020   FAIL    (Missing Anti-clickjacking Header)
+10031   FAIL    (User Controllable HTML Element Attribute - Potential XSS)
+10043   FAIL    (User Controllable JavaScript Event - XSS)
