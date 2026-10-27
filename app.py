@@ -52,6 +52,7 @@ if not DATABASE_URL:
 DB_CONNECT_RETRIES = 10
 DB_CONNECT_DELAY_SECONDS = 2
 
+
 def _connect_with_retry():
     """Abre a conexao com o Postgres, tentando de novo se o banco ainda
     estiver iniciando (o healthcheck do compose ja ajuda, mas nao custa ser
