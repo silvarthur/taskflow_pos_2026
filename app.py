@@ -216,10 +216,11 @@ def new_task():
         title = request.form["title"]
         description = request.form["description"]
         db = get_db()
-        db.execute(
-            "INSERT INTO tasks (user_id, title, description) VALUES (?, ?, ?)",
-            (session["user_id"], title, description),
-        )
+        with db.cursor() as cur:
+            cur.execute(
+                "INSERT INTO tasks (user_id, title, description) VALUES (%s, %s, %s)",
+                (session["user_id"], title, description),
+            )
         db.commit()
         return redirect(url_for("tasks"))
 
