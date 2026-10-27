@@ -75,6 +75,7 @@ jobs:
           # Falha o job (exit-code 1) apenas para severidades relevantes,
           # seguindo o mesmo padrao de gate usado no Modulo 2 (Trivy para
           # imagens de container) e no Modulo 3 (SCA).
+          file-patterns: "terraform:.*\\.tf$"
           severity: HIGH,CRITICAL
           exit-code: "1"
 
