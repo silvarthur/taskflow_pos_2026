@@ -71,6 +71,7 @@ def _connect_with_retry():
             time.sleep(DB_CONNECT_DELAY_SECONDS)
     raise last_error
 
+
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
