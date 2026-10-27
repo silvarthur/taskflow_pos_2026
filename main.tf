@@ -62,6 +62,10 @@ resource "aws_s3_bucket" "relatorios_taskflow" {
   # cada recurso, quem e o responsavel, e se pode ser apagado com seguranca.
   # (Isso e mais uma boa pratica de governanca do que uma falha critica de
   # seguranca, mas vale mencionar em aula.)
+
+  # Ignores para o Checkov referentes a recursos adicionais de alto custo/complexidade
+  # checkov:skip=CKV_AWS_144: "Replicacao entre regioes desnecessaria para laboratorio"
+  # checkov:skip=CKV_AWS_18: "Access logging nao habilitado para este bucket de estudo"
   tags = {
     Projeto  = "taskflow-devsecops-curso"
     Ambiente = "estudo"
@@ -82,18 +86,6 @@ resource "aws_kms_key" "s3_key" {
     Projeto = "taskflow-devsecops-curso"
   }
 }
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "relatorios_taskflow" {
-  bucket = aws_s3_bucket.relatorios_taskflow.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.s3_key.arn
-      sse_algorithm     = "aws:kms"
-    }
-  }
-}
-
 
 resource "aws_s3_bucket_notification" "relatorios_taskflow" {
   bucket = aws_s3_bucket.relatorios_taskflow.id
@@ -135,7 +127,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "relatorios_taskfl
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.s3_key.arn
+      sse_algorithm     = "aws:kms"
     }
   }
 }
@@ -152,6 +145,19 @@ resource "aws_s3_bucket_versioning" "relatorios_taskflow" {
   }
 }
 
+# Regra de Ciclo de Vida (Lifecycle)
+resource "aws_s3_bucket_lifecycle_configuration" "relatorios_taskflow" {
+  bucket = aws_s3_bucket.relatorios_taskflow.id
+
+  rule {
+    id     = "limpeza_automática"
+    status = "Enabled"
+
+    expiration {
+      days = 90
+    }
+  }
+}
 
 # -----------------------------------------------------------------------
 # RECURSO 2: Security Group (firewall de rede) para uma instancia EC2
