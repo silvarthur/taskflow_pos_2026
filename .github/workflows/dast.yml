@@ -83,7 +83,7 @@ jobs:
 
       - name: Encerrar o container do TaskFlow
         if: always()
-        run: docker rm -f taskflow-ci || true
+        run: docker compose down -v
 
   # Job separado, opcional: falha explicitamente o pipeline caso existam
   # alertas de risco Medium ou acima. A "action-baseline" ja retorna um
