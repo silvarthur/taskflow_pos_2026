@@ -69,6 +69,36 @@ resource "aws_s3_bucket" "relatorios_taskflow" {
   }
 }
 
+# Criptografia em repouso (server-side encryption) usando KMS. O bloco
+# abaixo cria uma chave KMS e configura o bucket para usar essa chave para
+# criptografar os objetos armazenados. Isso garante que, mesmo que alguem
+# consiga acesso ao bucket, os dados estarao protegidos por criptografia.
+resource "aws_kms_key" "s3_key" {
+  description             = "Chave KMS para criptografia do bucket de relatorios"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  tags = {
+    Projeto = "taskflow-devsecops-curso"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "relatorios_taskflow" {
+  bucket = aws_s3_bucket.relatorios_taskflow.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = aws_kms_key.s3_key.arn
+      sse_algorithm     = "aws:kms"
+    }
+  }
+}
+
+
+resource "aws_s3_bucket_notification" "relatorios_taskflow" {
+  bucket = aws_s3_bucket.relatorios_taskflow.id
+}
+
 # FALHA 2: controle de acesso publico do bucket todo DESABILITADO. O bloco
 # "aws_s3_bucket_public_access_block" e o mecanismo que a AWS oferece para
 # IMPEDIR que um bucket seja tornado publico por engano (por ACL ou por
@@ -122,6 +152,7 @@ resource "aws_s3_bucket_versioning" "relatorios_taskflow" {
   }
 }
 
+
 # -----------------------------------------------------------------------
 # RECURSO 2: Security Group (firewall de rede) para uma instancia EC2
 # hipotetica que serviria a aplicacao TaskFlow
@@ -150,9 +181,9 @@ resource "aws_security_group" "taskflow_app_sg" {
   # ferramentas adicionais de ataque.
   egress {
     description = "https only"
-    from_port   = 433
-    to_port     = 433
-    protocol    = "-1"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
