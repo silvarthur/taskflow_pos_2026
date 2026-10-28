@@ -7,3 +7,5 @@ checklist.md
 README.md
 __pycache__
 *.pyc
+logs
+observabilidade

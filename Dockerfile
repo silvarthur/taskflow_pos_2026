@@ -27,6 +27,11 @@ RUN groupadd --system taskflow && \
     useradd --system --gid taskflow --home-dir /app --shell /usr/sbin/nologin taskflow && \
     chown taskflow:taskflow /app
 
+# Modulo 6: pasta dos logs JSON. Precisa existir na imagem, com o dono certo,
+# para que o volume nomeado "taskflow_logs" (montado aqui pelo Compose) herde
+# a permissao de escrita do usuario "taskflow" mesmo com o container read_only.
+RUN mkdir /app/logs && chown taskflow:taskflow /app/logs
+
 COPY --chown=taskflow:taskflow . .
 
 # CORRIGIDO (FALHA 4): nenhum segredo em ENV/ARG. TASKFLOW_SECRET_KEY deve
