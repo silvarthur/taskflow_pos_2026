@@ -1,0 +1,38 @@
+# Configuracao do Promtail (Modulo 6).
+#
+# O Promtail faz o "tail -f" dos arquivos de log da TaskFlow e envia cada linha
+# ao Loki. Como a aplicacao ja loga em JSON (uma linha = um objeto), extraimos
+# apenas "level" e "event" como labels: sao poucos valores distintos, o que
+# mantem o indice do Loki pequeno. Campos de alta cardinalidade (ip, username,
+# request_id) NAO viram labels; as consultas os acessam com "| json".
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+# Posicao ja lida de cada arquivo. Fica em /tmp (tmpfs) porque o container e
+# read_only; ao reiniciar, o Promtail relê o arquivo (aceitavel em laboratorio).
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: taskflow
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: taskflow
+          app: taskflow
+          # Caminho DENTRO do container (volume taskflow_logs montado :ro).
+          __path__: /var/log/taskflow/*.log
+    pipeline_stages:
+      - json:
+          expressions:
+            level: level
+            event: event
+      - labels:
+          level:
+          event:

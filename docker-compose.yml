@@ -52,6 +52,10 @@ services:
     tmpfs:
       - /tmp
       - /app/.gunicorn
+    # Modulo 6: unico caminho gravavel alem dos tmpfs. O Promtail (stack em
+    # observabilidade/docker-compose.yml) le este mesmo volume como :ro.
+    volumes:
+      - taskflow_logs:/app/logs
     # FALHA 4: nenhum "healthcheck" definido - o Compose nao tem como saber
     # se a aplicacao subiu corretamente ou travou; ela e considerada "up"
     # assim que o processo do container inicia, mesmo que o Flask tenha
@@ -121,3 +125,7 @@ networks:
 
 volumes:
   taskflow_db_data:
+  # Nome fixo (sem o prefixo do projeto) para que a stack de observabilidade
+  # a referencie como "external".
+  taskflow_logs:
+    name: taskflow_logs

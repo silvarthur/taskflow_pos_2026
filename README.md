@@ -93,8 +93,10 @@ pull request em qualquer branch; esses arquivos não declaram
 ├── docker-compose.yml           # Aplicação, PostgreSQL, redes e volume
 ├── .env.example                 # Modelo das variáveis de ambiente
 ├── .github/workflows/           # CI, container, SAST, SCA e DAST
+├── observabilidade/             # Stack Loki + Promtail + Grafana (Módulo 6)
+├── scripts/                     # bruteforce.py — simulação de ataque
 ├── codigo/                      # Exemplos e materiais dos encontros
-└── docs/                        # Documentação de hardening
+└── docs/                        # Hardening, observabilidade e runbook
 ```
 
 ## Arquitetura da aplicação
@@ -122,7 +124,9 @@ pull request em qualquer branch; esses arquivos não declaram
                   |              v
                   |      volume taskflow_db_data
                   |
-          sem outros serviços
+                  v
+          volume taskflow_logs  (lido pela stack de observabilidade,
+                                  ver seção seguinte)
 ```
 
 O serviço `web` publica a porta 5000 para acesso pelo navegador e participa
@@ -130,3 +134,47 @@ das redes `frontend` e `backend`. O serviço `db` não publica portas no host:
 ele só é acessado pelo `web`, usando o nome `db` e a porta 5432 pela rede
 `backend`. Os dados do PostgreSQL persistem no volume nomeado
 `taskflow_db_data`.
+
+## Observabilidade (Módulo 6)
+
+Stack separada (`observabilidade/docker-compose.yml`), ligada à aplicação
+apenas pelo volume nomeado `taskflow_logs`, que o serviço `web` grava e o
+Promtail lê como somente leitura. Não há rede compartilhada entre os dois
+Composes.
+
+```text
+ docker-compose.yml (raiz)          observabilidade/docker-compose.yml
+┌─────────────────────┐            ┌──────────────────────────────────┐
+│ web                 │            │  rede: observabilidade (bridge)   │
+│ grava JSON em       │            │                                    │
+│ /app/logs           │            │  promtail ──> loki ──> grafana    │
+└──────────┬──────────┘            │  (lê :ro)   (armazena)  (consulta)│
+           │                       └──────────────────────┬───────────┘
+           v                                               │
+   volume taskflow_logs ─────────────────── montado :ro ───┘
+                                        Grafana: http://localhost:3000
+                                        Loki:    http://127.0.0.1:3100
+```
+
+Como subir, depois da aplicação já estar no ar:
+
+```bash
+cp observabilidade/.env.example observabilidade/.env   # defina a senha do Grafana
+docker compose -f observabilidade/docker-compose.yml up -d --wait
+```
+
+Acesse o Grafana em <http://localhost:3000> (usuário e senha definidos em
+`observabilidade/.env`) e use **Explore** com a fonte de dados **Loki**, já
+provisionada automaticamente.
+
+Para parar a stack:
+
+```bash
+docker compose -f observabilidade/docker-compose.yml down
+```
+
+Documentação relacionada:
+
+- [docs/observabilidade.md](docs/observabilidade.md) — eventos logados e consultas LogQL
+- [docs/runbook-login-bruteforce.md](docs/runbook-login-bruteforce.md) — resposta a incidente de força bruta no login
+- [scripts/bruteforce.py](scripts/bruteforce.py) — simula o ataque usado para testar a detecção
