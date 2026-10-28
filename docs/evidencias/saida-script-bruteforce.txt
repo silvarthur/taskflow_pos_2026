@@ -1,0 +1,29 @@
+Atacando http://localhost:5000/login como 'admin' (27 senhas)
+[01/27] falha
+[02/27] falha
+[03/27] falha
+[04/27] falha
+[05/27] falha
+[06/27] falha
+[07/27] falha
+[08/27] falha
+[09/27] falha
+[10/27] falha
+[11/27] falha
+[12/27] falha
+[13/27] falha
+[14/27] falha
+[15/27] falha
+[16/27] falha
+[17/27] falha
+[18/27] falha
+[19/27] falha
+[20/27] falha
+[21/27] falha
+[22/27] falha
+[23/27] falha
+[24/27] falha
+[25/27] falha
+[26/27] falha
+[27/27] SUCESSO apos 26 falhas
+Fim: 26 falhas em 9.2s
