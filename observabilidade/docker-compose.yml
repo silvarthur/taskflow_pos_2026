@@ -19,8 +19,12 @@ name: taskflow-observabilidade
 services:
   loki:
     image: grafana/loki:2.9.6
+    container_name: taskflow-loki
     command: -config.file=/etc/loki/local-config.yaml
-    # Sem "ports": so o Grafana e o Promtail, na mesma rede, falam com o Loki.
+    # API do Loki publicada so em localhost (a referencia publica em todas as
+    # interfaces); Grafana e Promtail o acessam pela rede interna.
+    ports:
+      - "127.0.0.1:3100:3100"
     security_opt:
       - no-new-privileges:true
     networks:
@@ -41,6 +45,7 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.6
+    container_name: taskflow-promtail
     command: -config.file=/etc/promtail/config.yml
     security_opt:
       - no-new-privileges:true
@@ -63,6 +68,7 @@ services:
 
   grafana:
     image: grafana/grafana:10.4.2
+    container_name: taskflow-grafana
     ports:
       - "127.0.0.1:3000:3000"
     environment:
