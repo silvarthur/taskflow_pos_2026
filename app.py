@@ -17,17 +17,104 @@ Ao longo dos encontros, cada uma dessas falhas sera identificada por uma
 ferramenta especifica da esteira e corrigida em uma versao "fixed" do codigo.
 """
 
+import json
+import logging
 import os
 import time
+import uuid
+from datetime import datetime, timezone
+from logging.handlers import WatchedFileHandler
 
 import psycopg2
 import psycopg2.extras
 
-from flask import Flask, g, redirect, request, session, url_for, render_template
+from flask import (
+    Flask,
+    g,
+    has_request_context,
+    redirect,
+    request,
+    session,
+    url_for,
+    render_template,
+)
 from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
+
+
+# ---------------------------------------------------------------------------
+# Logging estruturado (Modulo 6)
+#
+# Cada log e um objeto JSON em uma linha (JSON Lines), emitido em stdout e em
+# um arquivo (TASKFLOW_LOG_DIR/taskflow.log) que o Promtail le e envia ao Loki.
+#
+# REGRA: nunca logar request.form inteiro, senha, token ou cookie. Os eventos
+# abaixo recebem apenas campos escolhidos um a um (username, ip, result...).
+# ---------------------------------------------------------------------------
+LOG_DIR = os.environ.get("TASKFLOW_LOG_DIR", "logs")
+LOG_FILE = "taskflow.log"
+
+# Atributos que todo LogRecord ja tem; o que sobrar vem de `extra={...}`.
+_RESERVED_RECORD_KEYS = set(
+    logging.LogRecord("", 0, "", 0, "", None, None).__dict__
+) | {"message", "asctime"}
+
+
+class JsonFormatter(logging.Formatter):
+    """Formata cada LogRecord como uma linha JSON."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for key, value in record.__dict__.items():
+            if key not in _RESERVED_RECORD_KEYS and key not in entry:
+                entry[key] = value
+        if record.exc_info:
+            entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(entry, ensure_ascii=False, default=str)
+
+
+def configurar_logging() -> logging.Logger:
+    logger = logging.getLogger("taskflow")
+    if logger.handlers:
+        return logger
+
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    formatter = JsonFormatter()
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # WatchedFileHandler (e nao RotatingFileHandler): o gunicorn roda varios
+    # workers gravando no mesmo arquivo, e a rotacao feita por cada um deles
+    # corromperia o log. A rotacao fica por conta de agente externo.
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        file_handler = WatchedFileHandler(
+            os.path.join(LOG_DIR, LOG_FILE), encoding="utf-8"
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError as exc:
+        logger.warning(
+            "arquivo de log indisponivel, usando apenas stdout",
+            extra={"event": "log_file_unavailable", "log_dir": LOG_DIR, "error": str(exc)},
+        )
+    return logger
+
+
+logger = configurar_logging()
 
 app = Flask(__name__)
 _secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
@@ -65,9 +152,15 @@ def _connect_with_retry():
             )
         except psycopg2.OperationalError as exc:
             last_error = exc
-            print(
-                f"[db] tentativa {attempt}/{DB_CONNECT_RETRIES} falhou: {exc}",
-                flush=True,
+            logger.warning(
+                "falha ao conectar no banco",
+                extra={
+                    "event": "db_connect_retry",
+                    "attempt": attempt,
+                    "max_attempts": DB_CONNECT_RETRIES,
+                    "error": str(exc).strip(),
+                    "request_id": g.get("request_id") if has_request_context() else None,
+                },
             )
             time.sleep(DB_CONNECT_DELAY_SECONDS)
     raise last_error
@@ -126,6 +219,55 @@ def init_db():
                 ("aluno", generate_password_hash("senha123")),
             )
     db.commit()
+    logger.info(
+        "banco inicializado, aplicacao pronta",
+        extra={"event": "app_startup"},
+    )
+
+
+@app.before_request
+def gerar_request_id():
+    # Sempre gerado no servidor: aceitar X-Request-ID do cliente permitiria
+    # forjar identificadores e poluir a correlacao dos logs.
+    g.request_id = str(uuid.uuid4())
+    g.start_time = time.time()
+
+
+@app.after_request
+def logar_fim_da_requisicao(response):
+    request_id = g.get("request_id")
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "requisicao finalizada",
+        extra={
+            "event": "http_request",
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.path,
+            "status_code": response.status_code,
+            "duration_ms": round((time.time() - g.get("start_time", time.time())) * 1000, 2),
+            "user": session.get("username"),
+            "ip": request.remote_addr,
+        },
+    )
+    return response
+
+
+@app.errorhandler(Exception)
+def tratar_erro_inesperado(exc):
+    # Erros HTTP normais (404, 400...) seguem o fluxo padrao do Flask.
+    if isinstance(exc, HTTPException):
+        return exc
+    logger.error(
+        "erro nao tratado",
+        exc_info=exc,
+        extra={
+            "event": "unhandled_exception",
+            "request_id": g.get("request_id"),
+            "path": request.path,
+        },
+    )
+    return "Erro interno do servidor.", 500
 
 
 @app.route("/")
@@ -149,11 +291,33 @@ def login():
             )
             user = cur.fetchone()
 
+        # Apenas username e IP vao para o log. A senha nao tem motivo de
+        # negocio para existir em log, nem mascarada.
         if user and check_password_hash(user["password"], password):
             session["user_id"] = user["id"]
             session["username"] = user["username"]
+            logger.info(
+                "login bem-sucedido",
+                extra={
+                    "event": "login_attempt",
+                    "result": "success",
+                    "username": username,
+                    "ip": request.remote_addr,
+                    "request_id": g.get("request_id"),
+                },
+            )
             return redirect(url_for("tasks"))
         error = "Usuario ou senha invalidos."
+        logger.warning(
+            "login falhou",
+            extra={
+                "event": "login_attempt",
+                "result": "failure",
+                "username": username,
+                "ip": request.remote_addr,
+                "request_id": g.get("request_id"),
+            },
+        )
 
     return f"""
     <h1>TaskFlow - Login</h1>
@@ -168,6 +332,15 @@ def login():
 
 @app.route("/logout")
 def logout():
+    logger.info(
+        "logout",
+        extra={
+            "event": "logout",
+            "username": session.get("username"),
+            "ip": request.remote_addr,
+            "request_id": g.get("request_id"),
+        },
+    )
     session.clear()
     return redirect(url_for("login"))
 
@@ -192,6 +365,17 @@ def tasks():
                 "SELECT * FROM tasks WHERE user_id = %s", (session["user_id"],)
             )
         rows = cur.fetchall()
+
+    logger.info(
+        "lista de tarefas acessada",
+        extra={
+            "event": "tasks_list_accessed",
+            "username": session["username"],
+            "search_term": search or None,
+            "results_count": len(rows),
+            "request_id": g.get("request_id"),
+        },
+    )
 
     items = ""
     for row in rows:
@@ -224,6 +408,18 @@ def new_task():
                 (session["user_id"], title, description),
             )
         db.commit()
+        # So o titulo e o tamanho da descricao: o texto pode conter dado
+        # sensivel digitado pelo usuario.
+        logger.info(
+            "tarefa criada",
+            extra={
+                "event": "task_created",
+                "username": session["username"],
+                "title": title,
+                "description_length": len(description or ""),
+                "request_id": g.get("request_id"),
+            },
+        )
         return redirect(url_for("tasks"))
 
     return render_template("new_task.html")
