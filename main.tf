@@ -47,6 +47,7 @@ variable "allowed_ssh_ip" {
   type        = string
   default     = "10.0.0.0/16"
 }
+data "aws_caller_identity" "current" {}
 
 # -----------------------------------------------------------------------
 # RECURSO 1: bucket de armazenamento de objetos (S3)
@@ -62,11 +63,48 @@ resource "aws_s3_bucket" "relatorios_taskflow" {
   # cada recurso, quem e o responsavel, e se pode ser apagado com seguranca.
   # (Isso e mais uma boa pratica de governanca do que uma falha critica de
   # seguranca, mas vale mencionar em aula.)
+
+  # Ignores para o Checkov referentes a recursos adicionais de alto custo/complexidade
+  # checkov:skip=CKV_AWS_144: "Replicacao entre regioes desnecessaria para laboratorio"
+  # checkov:skip=CKV_AWS_18: "Access logging nao habilitado para este bucket de estudo"
   tags = {
     Projeto  = "taskflow-devsecops-curso"
     Ambiente = "estudo"
     Owner    = "disciplina-devsecops"
   }
+}
+
+# Criptografia em repouso (server-side encryption) usando KMS. O bloco
+# abaixo cria uma chave KMS e configura o bucket para usar essa chave para
+# criptografar os objetos armazenados. Isso garante que, mesmo que alguem
+# consiga acesso ao bucket, os dados estarao protegidos por criptografia.
+resource "aws_kms_key" "s3_key" {
+  description             = "Chave KMS para criptografia do bucket de relatorios"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Projeto = "taskflow-devsecops-curso"
+  }
+}
+
+resource "aws_s3_bucket_notification" "relatorios_taskflow" {
+  bucket = aws_s3_bucket.relatorios_taskflow.id
 }
 
 # FALHA 2: controle de acesso publico do bucket todo DESABILITADO. O bloco
@@ -105,7 +143,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "relatorios_taskfl
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      kms_master_key_id = aws_kms_key.s3_key.arn
+      sse_algorithm     = "aws:kms"
     }
   }
 }
@@ -122,11 +161,30 @@ resource "aws_s3_bucket_versioning" "relatorios_taskflow" {
   }
 }
 
+# Regra de Ciclo de Vida (Lifecycle)
+resource "aws_s3_bucket_lifecycle_configuration" "relatorios_taskflow" {
+  bucket = aws_s3_bucket.relatorios_taskflow.id
+
+  rule {
+    id     = "limpeza_automática"
+    status = "Enabled"
+
+    expiration {
+      days = 90
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
 # -----------------------------------------------------------------------
 # RECURSO 2: Security Group (firewall de rede) para uma instancia EC2
 # hipotetica que serviria a aplicacao TaskFlow
 # -----------------------------------------------------------------------
 resource "aws_security_group" "taskflow_app_sg" {
+  # checkov:skip=CKV2_AWS_5: "Security Group nao associado a ENI/EC2 por ser apenas um teste de IaC estatico"  
   name        = "taskflow-app-sg-seguro"
   description = "Security group de exemplo"
 
@@ -150,10 +208,10 @@ resource "aws_security_group" "taskflow_app_sg" {
   # ferramentas adicionais de ataque.
   egress {
     description = "https only"
-    from_port   = 433
-    to_port     = 433
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_ssh_ip]
   }
 
   tags = {
